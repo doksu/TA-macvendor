@@ -107,7 +107,7 @@ RE_EUI64_FORMATS = (
     #   4 bytes x 4 (Cisco like)
     '^' + ':'.join(['([0-9A-F]{1,4})'] * 4) + '$',
     '^' + '-'.join(['([0-9A-F]{1,4})'] * 4) + '$',
-    '^' + '\.'.join(['([0-9A-F]{1,4})'] * 4) + '$',
+    '^' + r'\.'.join(['([0-9A-F]{1,4})'] * 4) + '$',
 
     #   16 bytes (bare, no delimiters)
     '^(' + ''.join(['[0-9A-F]'] * 16) + ')$',
@@ -153,7 +153,7 @@ def str_to_int(addr):
         if not words:
             raise TypeError
     except TypeError:
-        raise AddrFormatError('invalid IEEE EUI-64 identifier: %r!' % addr)
+        raise AddrFormatError('invalid IEEE EUI-64 identifier: %r!' % (addr,))
 
     if isinstance(words, tuple):
         pass

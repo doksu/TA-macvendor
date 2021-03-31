@@ -27,8 +27,6 @@ if _sys.version_info[0] == 3:
 
     _callable = lambda x: hasattr(x, '__call__')
 
-    _func_doc = lambda x: x.__doc__
-
     _dict_keys = lambda x: list(x.keys())
 
     _dict_items = lambda x: list(x.items())
@@ -45,18 +43,6 @@ if _sys.version_info[0] == 3:
         return list(range(*args, **kwargs))
 
     _iter_range = range
-
-    def _func_name(f, name=None):
-        if name is not None:
-            f.__name__ = name
-        else:
-            return f.__name__
-
-    def _func_doc(f, docstring=None):
-        if docstring is not None:
-            f.__doc__ = docstring
-        else:
-            return f.__doc__
 
     def _iter_next(x):
         return next(x)
@@ -94,18 +80,6 @@ elif _sys.version_info[0:2] > [2, 3]:
 
     _iter_range = xrange
 
-    def _func_name(f, name=None):
-        if name is not None:
-            f.func_name = name
-        else:
-            return f.func_name
-
-    def _func_doc(f, docstring=None):
-        if docstring is not None:
-            f.func_doc = docstring
-        else:
-            return f.func_doc
-
     def _iter_next(x):
         return x.next()
 else:
@@ -113,3 +87,7 @@ else:
     raise RuntimeError(
         'this module only supports Python 2.4.x or higher (including 3.x)!')
 
+try:
+    from importlib import resources as _importlib_resources
+except ImportError:
+    import importlib_resources as _importlib_resources

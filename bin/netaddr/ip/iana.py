@@ -29,13 +29,12 @@ More details can be found at the following URLs :-
     - IEEE Protocols Information Home Page - http://www.iana.org/protocols/
 """
 
-import os.path as _path
 import sys as _sys
 from xml.sax import make_parser, handler
 
 from netaddr.core import Publisher, Subscriber
 from netaddr.ip import IPAddress, IPNetwork, IPRange, cidr_abbrev_to_verbose
-from netaddr.compat import _dict_items, _callable
+from netaddr.compat import _dict_items, _callable, _importlib_resources
 
 
 
@@ -214,7 +213,13 @@ class IPv6Parser(XMLRecordParser):
         record = {
             'prefix': str(rec.get('prefix', '')).strip(),
             'allocation': str(rec.get('description', '')).strip(),
-            'reference': str(rec.get('rfc', [''])[0]).strip(),
+            # HACK: -1 instead of 0 is a hacky hack to get 4291 instead of 3513 from
+            #
+            #     <xref type="rfc" data="rfc3513"/> was later obsoleted by <xref type="rfc" data="rfc4291"/>
+            #
+            # I imagine there's no way to solve this in a general way, maybe we should start returning a list
+            # of RFC-s here?
+            'reference': str(rec.get('rfc', [''])[-1]).strip(),
         }
 
         return record
@@ -362,21 +367,21 @@ def load_info():
     Parse and load internal IANA data lookups with the latest information from
     data files.
     """
-    PATH = _path.dirname(__file__)
-
-    ipv4 = IPv4Parser(open(_path.join(PATH, 'ipv4-address-space.xml')))
+    ipv4 = IPv4Parser(_importlib_resources.open_binary(__package__, 'ipv4-address-space.xml'))
     ipv4.attach(DictUpdater(IANA_INFO['IPv4'], 'IPv4', 'prefix'))
     ipv4.parse()
 
-    ipv6 = IPv6Parser(open(_path.join(PATH, 'ipv6-address-space.xml')))
+    ipv6 = IPv6Parser(_importlib_resources.open_binary(__package__, 'ipv6-address-space.xml'))
     ipv6.attach(DictUpdater(IANA_INFO['IPv6'], 'IPv6', 'prefix'))
     ipv6.parse()
 
-    ipv6ua = IPv6UnicastParser(open(_path.join(PATH, 'ipv6-unicast-address-assignments.xml')))
+    ipv6ua = IPv6UnicastParser(
+        _importlib_resources.open_binary(__package__, 'ipv6-unicast-address-assignments.xml'),
+    )
     ipv6ua.attach(DictUpdater(IANA_INFO['IPv6_unicast'], 'IPv6_unicast', 'prefix'))
     ipv6ua.parse()
 
-    mcast = MulticastParser(open(_path.join(PATH, 'multicast-addresses.xml')))
+    mcast = MulticastParser(_importlib_resources.open_binary(__package__, 'multicast-addresses.xml'))
     mcast.attach(DictUpdater(IANA_INFO['multicast'], 'multicast', 'address'))
     mcast.parse()
 
@@ -407,7 +412,7 @@ def _within_bounds(ip, ip_range):
         #   IP address.
         return ip == ip_range
 
-    raise Exception('Unsupported IP range or address: %r!' % ip_range)
+    raise Exception('Unsupported IP range or address: %r!' % (ip_range,))
 
 
 def query(ip_addr):

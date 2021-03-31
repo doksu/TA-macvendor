@@ -88,14 +88,14 @@ class IPSet(object):
     subnets.
 
     """
-    __slots__ = ('_cidrs',)
+    __slots__ = ('_cidrs', '__weakref__')
 
     def __init__(self, iterable=None, flags=0):
         """
         Constructor.
 
-        :param iterable: (optional) an iterable containing IP addresses and
-            subnets.
+        :param iterable: (optional) an iterable containing IP addresses,
+            subnets or ranges.
 
         :param flags: decides which rules are applied to the interpretation
             of the addr value. See the netaddr.core namespace documentation
@@ -382,7 +382,7 @@ class IPSet(object):
         Update the contents of this IP set with the union of itself and
         other IP set.
 
-        :param iterable: an iterable containing IP addresses and subnets.
+        :param iterable: an iterable containing IP addresses, subnets or ranges.
 
         :param flags: decides which rules are applied to the interpretation
             of the addr value. See the netaddr.core namespace documentation

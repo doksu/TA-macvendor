@@ -13,12 +13,12 @@ from netaddr.strategy import eui48 as _eui48, eui64 as _eui64
 from netaddr.strategy.eui48 import mac_eui48
 from netaddr.strategy.eui64 import eui64_base
 from netaddr.ip import IPAddress
-from netaddr.compat import _is_int, _is_str
+from netaddr.compat import _importlib_resources, _is_int, _is_str
 
 
 class BaseIdentifier(object):
     """Base class for all IEEE identifiers."""
-    __slots__ = ('_value',)
+    __slots__ = ('_value', '__weakref__')
 
     def __init__(self):
         self._value = None
@@ -85,20 +85,20 @@ class OUI(BaseIdentifier):
             if 0 <= oui <= 0xffffff:
                 self._value = oui
             else:
-                raise ValueError('OUI int outside expected range: %r' % oui)
+                raise ValueError('OUI int outside expected range: %r' % (oui,))
         else:
-            raise TypeError('unexpected OUI format: %r' % oui)
+            raise TypeError('unexpected OUI format: %r' % (oui,))
 
         #   Discover offsets.
         if self._value in ieee.OUI_INDEX:
-            fh = open(ieee.OUI_REGISTRY_PATH, 'rb')
+            fh = _importlib_resources.open_binary(__package__, 'oui.txt')
             for (offset, size) in ieee.OUI_INDEX[self._value]:
                 fh.seek(offset)
                 data = fh.read(size).decode('UTF-8')
                 self._parse_data(data, offset, size)
             fh.close()
         else:
-            raise NotRegisteredError('OUI %r not registered!' % oui)
+            raise NotRegisteredError('OUI %r not registered!' % (oui,))
 
     def __eq__(self, other):
         if not isinstance(other, OUI):
@@ -182,6 +182,8 @@ class OUI(BaseIdentifier):
 
 
 class IAB(BaseIdentifier):
+    IAB_EUI_VALUES = (0x0050c2, 0x40d855)
+
     """
     An individual IEEE IAB (Individual Address Block) identifier.
 
@@ -190,8 +192,8 @@ class IAB(BaseIdentifier):
     """
     __slots__ = ('record',)
 
-    @staticmethod
-    def split_iab_mac(eui_int, strict=False):
+    @classmethod
+    def split_iab_mac(cls, eui_int, strict=False):
         """
         :param eui_int: a MAC IAB as an unsigned integer.
 
@@ -199,7 +201,7 @@ class IAB(BaseIdentifier):
             IAB MAC/EUI-48 address are non-zero, ignores them otherwise.
             (Default: False)
         """
-        if 0x50c2000 <= eui_int <= 0x50c2fff:
+        if (eui_int >> 12) in cls.IAB_EUI_VALUES:
             return eui_int, 0
 
         user_mask = 2 ** 12 - 1
@@ -207,7 +209,7 @@ class IAB(BaseIdentifier):
         iab_bits = eui_int >> 12
         user_bits = (eui_int | iab_mask) - iab_mask
 
-        if 0x50c2000 <= iab_bits <= 0x50c2fff:
+        if (iab_bits >> 12) in cls.IAB_EUI_VALUES:
             if strict and user_bits != 0:
                 raise ValueError('%r is not a strict IAB!' % hex(user_bits))
         else:
@@ -252,11 +254,11 @@ class IAB(BaseIdentifier):
             iab_int, user_int = self.split_iab_mac(iab, strict=strict)
             self._value = iab_int
         else:
-            raise TypeError('unexpected IAB format: %r!' % iab)
+            raise TypeError('unexpected IAB format: %r!' % (iab,))
 
         #   Discover offsets.
         if self._value in ieee.IAB_INDEX:
-            fh = open(ieee.IAB_REGISTRY_PATH, 'rb')
+            fh = _importlib_resources.open_binary(__package__, 'iab.txt')
             (offset, size) = ieee.IAB_INDEX[self._value][0]
             self.record['offset'] = offset
             self.record['size'] = size
@@ -265,7 +267,7 @@ class IAB(BaseIdentifier):
             self._parse_data(data, offset, size)
             fh.close()
         else:
-            raise NotRegisteredError('IAB %r not unregistered!' % iab)
+            raise NotRegisteredError('IAB %r not unregistered!' % (iab,))
 
     def __eq__(self, other):
         if not isinstance(other, IAB):
@@ -408,7 +410,7 @@ class EUI(BaseIdentifier):
             self._module = _eui64
         else:
             raise ValueError('unpickling failed for object state: %s' \
-                % str(state))
+                % (state,))
 
         self.dialect = dialect
 
@@ -434,7 +436,7 @@ class EUI(BaseIdentifier):
 
             if self._module is None:
                 raise AddrFormatError('failed to detect EUI version: %r'
-                    % value)
+                    % (value,))
         else:
             #   EUI version is explicit.
             if _is_str(value):
@@ -447,7 +449,7 @@ class EUI(BaseIdentifier):
                 if 0 <= int(value) <= self._module.max_int:
                     self._value = int(value)
                 else:
-                    raise AddrFormatError('bad address format: %r' % value)
+                    raise AddrFormatError('bad address format: %r' % (value,))
 
     value = property(_get_value, _set_value, None,
         'a positive integer representing the value of this EUI indentifier.')
@@ -455,17 +457,20 @@ class EUI(BaseIdentifier):
     def _get_dialect(self):
         return self._dialect
 
-    def _set_dialect(self, value):
+    def _validate_dialect(self, value):
         if value is None:
             if self._module is _eui64:
-                self._dialect = eui64_base
+               return eui64_base
             else:
-                self._dialect = mac_eui48
+                return mac_eui48
         else:
             if hasattr(value, 'word_size') and hasattr(value, 'word_fmt'):
-                self._dialect = value
+                return value
             else:
                 raise TypeError('custom dialects should subclass mac_eui48!')
+
+    def _set_dialect(self, value):
+        self._dialect = self._validate_dialect(value)
 
     dialect = property(_get_dialect, _set_dialect, None,
         "a Python class providing support for the interpretation of "
@@ -489,7 +494,7 @@ class EUI(BaseIdentifier):
 
     def is_iab(self):
         """:return: True if this EUI is an IAB address, False otherwise"""
-        return 0x50c2000 <= (self._value >> 12) <= 0x50c2fff
+        return (self._value >> 24) in IAB.IAB_EUI_VALUES
 
     @property
     def iab(self):
@@ -522,7 +527,7 @@ class EUI(BaseIdentifier):
             words = self._module.int_to_words(self._value, self._dialect)
             return [words[i] for i in range(*idx.indices(len(words)))]
         else:
-            raise TypeError('unsupported type %r!' % idx)
+            raise TypeError('unsupported type %r!' % (idx,))
 
     def __setitem__(self, idx, value):
         """Set the value of the word referenced by index in this address"""
@@ -534,7 +539,7 @@ class EUI(BaseIdentifier):
             raise TypeError('index not an integer!')
 
         if not 0 <= idx <= (self._dialect.num_words - 1):
-            raise IndexError('index %d outside address type boundary!' % idx)
+            raise IndexError('index %d outside address type boundary!' % (idx,))
 
         if not _is_int(value):
             raise TypeError('value not an integer!')
@@ -720,6 +725,19 @@ class EUI(BaseIdentifier):
             data['IAB'] = self.iab.registration()
 
         return DictDotLookup(data)
+
+    def format(self, dialect=None):
+        """
+        Format the EUI into the representational format according to the given
+        dialect
+
+        :param dialect: the mac_* dialect defining the formatting of EUI-48 \
+            (MAC) addresses.
+
+        :return: EUI in representational format according to the given dialect
+        """
+        validated_dialect = self._validate_dialect(dialect)
+        return self._module.int_to_str(self._value, validated_dialect)
 
     def __str__(self):
         """:return: EUI in representational format"""
